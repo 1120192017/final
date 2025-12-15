@@ -1,0 +1,1731 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>LLM Inference Visualizer v3.3 (Fixed)</title>
+  <style>
+    :root {
+      --bg-dark: #0f172a;
+      --panel-bg: rgba(30, 41, 59, 0.7);
+      --border: rgba(148, 163, 184, 0.12);
+      --accent: #3b82f6;
+      --accent-glow: rgba(59, 130, 246, 0.5);
+      --text-main: #f8fafc;
+      --text-sub: #94a3b8;
+      --success: #10b981;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --purple: #8b5cf6;
+      --pink: #ec4899;
+      --card: rgba(0,0,0,0.22);
+      --card2: rgba(0,0,0,0.16);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background-color: var(--bg-dark);
+      background-image:
+        radial-gradient(circle at 10% 20%, rgba(59, 130, 246, 0.10) 0%, transparent 40%),
+        radial-gradient(circle at 90% 80%, rgba(139, 92, 246, 0.10) 0%, transparent 40%);
+      color: var(--text-main);
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      overflow: hidden;
+    }
+
+    /* --- Sidebar --- */
+    .sidebar {
+      width: 260px;
+      background: rgba(15, 23, 42, 0.9);
+      backdrop-filter: blur(20px);
+      border-right: 1px solid var(--border);
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      z-index: 10;
+    }
+    .logo {
+      font-size: 1.4rem;
+      font-weight: 800;
+      background: linear-gradient(90deg, #60a5fa, #a78bfa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 40px;
+      letter-spacing: -0.5px;
+    }
+    .nav-item {
+      position: relative;
+      padding: 14px 15px 14px 40px;
+      margin-bottom: 8px;
+      border-radius: 8px;
+      cursor: pointer;
+      color: var(--text-sub);
+      transition: all 0.3s;
+      font-size: 0.95rem;
+      user-select: none;
+    }
+    .nav-item::before {
+      content: '';
+      position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+      width: 8px; height: 8px; border-radius: 50%; background: var(--text-sub); opacity: 0.3;
+    }
+    .nav-item:hover { background: rgba(255,255,255,0.05); color: var(--text-main); }
+    .nav-item.active {
+      color: white; font-weight: 600;
+      background: linear-gradient(90deg, rgba(59, 130, 246, 0.15), transparent);
+      border-left: 3px solid var(--accent);
+      padding-left: 37px;
+    }
+    .nav-item.active::before { background: var(--accent); opacity: 1; box-shadow: 0 0 10px var(--accent); }
+
+    /* --- Main Stage --- */
+    .stage {
+      flex: 1;
+      padding: 40px 60px;
+      overflow-y: auto;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    .header-section { margin-bottom: 30px; animation: slideDown 0.5s ease-out; }
+    .badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 20px;
+      background: rgba(139, 92, 246, 0.15);
+      color: #a78bfa;
+      font-size: 0.75rem;
+      font-weight: 700;
+      margin-bottom: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    h1 { margin: 0 0 10px 0; font-size: 2.2rem; letter-spacing: -1px; }
+    .subtitle { color: var(--text-sub); line-height: 1.6; max-width: 900px; font-size: 1.05rem; }
+
+    .lab-card {
+      background: var(--panel-bg);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 30px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+      backdrop-filter: blur(10px);
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      animation: fadeIn 0.6s ease-out;
+      min-height: 520px;
+      position: relative;
+      overflow: hidden;
+      min-width: 0;
+    }
+
+    .scene { display: none; height: 100%; flex-direction: column; min-width: 0; }
+    .scene.active { display: flex; }
+
+    /* --- Controls --- */
+    .controls {
+      margin-top: 20px; display: flex; justify-content: space-between; align-items: center;
+      border-top: 1px solid var(--border); padding-top: 20px;
+      gap: 12px; flex-wrap: wrap;
+    }
+    button.btn-primary {
+      background: linear-gradient(135deg, var(--accent), #2563eb);
+      color: white; border: none; padding: 12px 28px;
+      border-radius: 10px; font-weight: 600; cursor: pointer;
+      box-shadow: 0 4px 15px rgba(37, 99, 235, 0.3);
+      transition: transform 0.2s, box-shadow 0.2s;
+      display: flex; align-items: center; gap: 8px;
+      user-select: none;
+      white-space: nowrap;
+    }
+    button.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(37, 99, 235, 0.4); }
+    button.btn-ghost {
+      background: transparent; color: var(--text-sub); border: 1px solid var(--border);
+      padding: 10px 20px; border-radius: 10px; cursor: pointer; transition: 0.2s;
+      user-select: none;
+      white-space: nowrap;
+    }
+    button.btn-ghost:hover { background: rgba(255,255,255,0.05); color: white; }
+
+    /* --- Scene 1: Tokenizer --- */
+    .io-container { display: flex; gap: 20px; height: 100%; align-items: stretch; min-width: 0; }
+    .io-box {
+      flex: 1; background: rgba(0,0,0,0.2); border: 1px solid var(--border);
+      border-radius: 12px; padding: 20px; display: flex; flex-direction: column;
+      min-height: 300px; min-width: 0;
+    }
+    .io-label { font-size: 0.8rem; text-transform: uppercase; color: var(--text-sub); margin-bottom: 15px; font-weight: bold; letter-spacing: 1px; }
+    .token-input {
+      width: 100%; background: transparent; border: none; color: white;
+      font-size: 1.2rem; outline: none; resize: none; flex: 1; font-family: 'Inter', sans-serif;
+    }
+    .token-grid { display: flex; flex-wrap: wrap; gap: 8px; align-content: flex-start; height: 100%; overflow-y: auto; padding-bottom: 4px; min-width: 0; }
+    .token-chip {
+      padding: 6px 10px; border-radius: 8px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 0.92rem; animation: popIn 0.3s backwards; border: 1px solid;
+      cursor: pointer; user-select: none;
+      transition: transform .15s ease, background .15s ease, box-shadow .15s ease;
+    }
+    .token-chip:hover { transform: translateY(-1px); box-shadow: 0 10px 20px rgba(0,0,0,0.25); }
+    .token-chip.active {
+      outline: 2px solid rgba(16, 185, 129, 0.45);
+      box-shadow: 0 0 0 6px rgba(16, 185, 129, 0.08);
+    }
+
+    /* --- Scene 2: Process / Attention --- */
+    .process-layout {
+      display: grid;
+      grid-template-columns: minmax(520px, 1.15fr) minmax(360px, 0.85fr);
+      gap: 18px;
+      height: 100%;
+      min-width: 0;
+      align-items: stretch;
+    }
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+      position: relative;
+      overflow: hidden;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .panel.scrollable { overflow: auto; }
+    .panel-title {
+      display: flex; align-items: center; justify-content: space-between;
+      font-size: 0.85rem; color: var(--text-sub);
+      letter-spacing: .8px; text-transform: uppercase; font-weight: 700;
+      margin-bottom: 12px;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .mini-help { font-size: 0.78rem; color: rgba(148,163,184,0.85); line-height: 1.5; }
+
+    .layer-slider { display: flex; align-items: center; gap: 12px; margin-top: 8px; flex-wrap: wrap; }
+    .pill {
+      font-size: 0.78rem;
+      padding: 6px 10px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: rgba(0,0,0,0.12);
+      color: var(--text-sub);
+      user-select: none;
+      white-space: nowrap;
+    }
+    .pill strong { color: white; }
+    .hint-card {
+      margin-top: 12px;
+      padding: 12px;
+      border-radius: 12px;
+      background: rgba(0,0,0,0.18);
+      border: 1px solid rgba(148,163,184,0.12);
+      line-height: 1.55;
+      color: rgba(248,250,252,0.92);
+      font-size: 0.96rem;
+    }
+    .hint-card b { color: white; }
+
+    .attn-area {
+      position: relative;
+      height: 340px;
+      border-radius: 12px;
+      border: 1px dashed rgba(148,163,184,0.25);
+      background: rgba(0,0,0,0.10);
+      overflow: hidden;
+      margin-top: 12px;
+      flex: 1;
+      min-height: 240px;
+    }
+    .attn-row {
+      display: flex; flex-wrap: wrap; gap: 8px;
+      padding: 12px;
+      position: relative;
+      z-index: 2;
+    }
+    .attn-chip {
+      padding: 7px 10px;
+      border-radius: 10px;
+      border: 1px solid rgba(148,163,184,0.18);
+      background: rgba(0,0,0,0.16);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      cursor: pointer;
+      user-select: none;
+      transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+      font-size: 0.92rem;
+      display: flex; align-items: center; gap: 8px;
+      max-width: 100%;
+    }
+    .attn-chip:hover { transform: translateY(-1px); box-shadow: 0 10px 20px rgba(0,0,0,0.25); }
+    .attn-chip .dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(59,130,246,0.8); box-shadow: 0 0 12px rgba(59,130,246,0.35); }
+    .attn-chip.active { border-color: rgba(16,185,129,0.6); box-shadow: 0 0 0 6px rgba(16,185,129,0.08); }
+    .attn-svg { position: absolute; left: 0; top: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; }
+
+    .layer-stack { display: flex; flex-direction: column; gap: 10px; }
+    .model-layer {
+      height: 56px; background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+      border-radius: 10px; display: flex; align-items: center; justify-content: center;
+      color: var(--text-sub);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      position: relative; overflow: hidden;
+      padding: 0 12px;
+      text-align: center;
+    }
+    .data-flow-particle {
+      position: absolute; width: 8px; height: 8px; background: var(--accent); border-radius: 50%;
+      box-shadow: 0 0 10px var(--accent);
+      animation: flowRight 2s infinite linear;
+    }
+
+    /* --- Shared context window (Scene 3/4/5) --- */
+    .context-window {
+      padding: 15px; background: rgba(0,0,0,0.3); border-radius: 12px;
+      min-height: 78px; margin-bottom: 14px; font-size: 1.08rem; line-height: 1.55;
+      border: 1px solid rgba(59,130,246,0.55); box-shadow: 0 0 15px rgba(59, 130, 246, 0.1);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .ctx-flow {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.7;
+    }
+    .ctx-flow i {
+      position: absolute;
+      width: 6px; height: 6px;
+      border-radius: 999px;
+      background: rgba(59,130,246,0.9);
+      box-shadow: 0 0 14px rgba(59,130,246,0.35);
+      animation: ctxDrift 2.2s linear infinite;
+      top: 50%;
+      transform: translateY(-50%);
+    }
+    .ctx-flow i:nth-child(2){ animation-delay: .4s; opacity:.7; }
+    .ctx-flow i:nth-child(3){ animation-delay: .9s; opacity:.55; }
+    .ctx-flow i:nth-child(4){ animation-delay: 1.3s; opacity:.45; }
+    .ctx-flow i:nth-child(5){ animation-delay: 1.7s; opacity:.35; }
+
+    /* --- Controls rows (Scene 3/4/5) --- */
+    .controls-row {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-top: 8px;
+      margin-bottom: 6px;
+    }
+    .slider-container {
+      display: flex; align-items: center; gap: 12px;
+      background: rgba(0,0,0,0.18);
+      padding: 10px 16px; border-radius: 999px;
+      border: 1px solid rgba(148,163,184,0.14);
+      width: fit-content;
+      user-select: none;
+    }
+    input[type=range] { accent-color: var(--accent); }
+
+    .k-buttons { display: flex; gap: 8px; }
+    .k-btn {
+      padding: 9px 12px;
+      border-radius: 10px;
+      border: 1px solid rgba(148,163,184,0.18);
+      background: rgba(0,0,0,0.12);
+      color: var(--text-sub);
+      cursor: pointer;
+      user-select: none;
+      transition: .2s;
+      font-weight: 800;
+      font-size: 0.85rem;
+    }
+    .k-btn:hover { background: rgba(255,255,255,0.05); color: white; }
+    .k-btn.active { border-color: rgba(59,130,246,0.55); color: white; box-shadow: 0 0 0 6px rgba(59,130,246,0.08); }
+
+    /* --- Charts --- */
+    .chart-wrap {
+      flex: 1;
+      min-height: 260px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding-top: 6px;
+      min-width: 0;
+    }
+    .prob-chart {
+      height: 230px;
+      width: 100%;
+      max-width: 980px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      gap: 14px;
+      padding: 12px 10px 10px 10px;
+      border-bottom: 1px solid var(--border);
+      position: relative;
+      overflow: visible;
+      min-width: 0;
+    }
+    .prob-bar-group {
+      flex: 1;
+      min-width: 56px;
+      max-width: 120px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      position: relative;
+      cursor: pointer;
+      user-select: none;
+
+      height: 100%;
+      justify-content: flex-end;
+    }
+    .prob-bar {
+      width: 100%;
+      border-radius: 8px 8px 0 0;
+      transition: height 0.35s ease-out, opacity .2s, transform .2s;
+      opacity: 0.9;
+      position: relative;
+      transform-origin: bottom;
+    }
+    .prob-bar::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(120deg, rgba(255,255,255,0.14), transparent 55%);
+      opacity: 0.6;
+      border-radius: inherit;
+      pointer-events: none;
+    }
+    .prob-bar-group:hover .prob-bar { transform: scaleY(1.03); opacity: 1; }
+    .prob-bar.selected { background: var(--success) !important; opacity: 1; box-shadow: 0 0 18px rgba(16,185,129,0.75); }
+
+    .prob-label {
+      font-size: 0.92rem;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      text-align: center;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .prob-value { font-size: 0.78rem; color: var(--text-sub); }
+
+    /* bar pulsing (Scene 4 only) */
+    .prob-bar.pulse { animation: barPulse 1.15s ease-in-out infinite; }
+    @keyframes barPulse {
+      0%   { filter: saturate(1); transform: scaleY(1); }
+      50%  { filter: saturate(1.2); transform: scaleY(1.04); }
+      100% { filter: saturate(1); transform: scaleY(1); }
+    }
+
+    /* --- NEW Scene 3: KV Cache page --- */
+    .kv-topline{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      flex-wrap:wrap;
+      gap:12px;
+      margin-bottom:10px;
+    }
+    .kv-prompt-box{
+      width:100%;
+      padding: 14px 16px;
+      border-radius: 14px;
+      background: rgba(0,0,0,0.22);
+      border: 1px solid rgba(59,130,246,0.35);
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      flex-wrap:wrap;
+      box-shadow: 0 0 18px rgba(59,130,246,0.08);
+    }
+    .kv-prompt-box b{ color:white; }
+    .kv-controls{
+      display:flex;
+      gap:12px;
+      flex-wrap:wrap;
+      align-items:center;
+      margin-top: 12px;
+    }
+    .toggle{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      padding: 10px 14px;
+      border-radius: 999px;
+      background: rgba(0,0,0,0.18);
+      border: 1px solid rgba(148,163,184,0.14);
+      user-select:none;
+    }
+    .toggle input{ transform: scale(1.15); }
+    .kv-tip{
+      margin-top: 10px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(0,0,0,0.14);
+      border: 1px solid rgba(148,163,184,0.10);
+      color: rgba(148,163,184,0.92);
+      font-size: 0.92rem;
+    }
+    .kv-grid{
+      margin-top: 14px;
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      flex:1;
+      min-height: 0;
+    }
+    .kv-panel{
+      background: rgba(0,0,0,0.18);
+      border: 1px solid rgba(148,163,184,0.14);
+      border-radius: 14px;
+      padding: 14px;
+      display:flex;
+      flex-direction:column;
+      min-height: 0;
+      overflow:hidden;
+    }
+    .kv-panel.full-width {
+      grid-column: span 2;
+    }
+    .kv-panel-head{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      flex-wrap:wrap;
+      margin-bottom: 10px;
+    }
+    .kv-panel-head .t{
+      font-weight:900;
+      letter-spacing:.8px;
+      text-transform: uppercase;
+      font-size:.82rem;
+      color: rgba(148,163,184,0.92);
+    }
+    .kv-metric{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      align-items:center;
+      margin-bottom: 8px;
+      color: rgba(148,163,184,0.92);
+      font-size:0.9rem;
+    }
+    .kv-metric b{ color:white; }
+    .kv-chart{
+      height: 240px;
+      width: 100%;
+      display:flex;
+      align-items:flex-end;
+      gap: 6px;
+      padding: 10px 6px 8px 6px;
+      border-bottom: 1px solid rgba(148,163,184,0.14);
+      min-height: 220px;
+    }
+    .kv-bar{
+      flex:1;
+      border-radius: 8px 8px 0 0;
+      background: rgba(59,130,246,0.8);
+      position: relative;
+      opacity: .9;
+      transform-origin: bottom;
+      transition: height .25s ease, opacity .15s ease, transform .15s ease;
+    }
+    .kv-bar::after{
+      content:"";
+      position:absolute;
+      inset:0;
+      border-radius: inherit;
+      background: linear-gradient(120deg, rgba(255,255,255,0.14), transparent 55%);
+      pointer-events:none;
+      opacity: .65;
+    }
+    .kv-bar:hover{ opacity:1; transform: scaleY(1.02); }
+    .kv-xlabels{
+      display:flex;
+      justify-content:space-between;
+      color: rgba(148,163,184,0.75);
+      font-size: 0.78rem;
+      margin-top: 8px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+
+    /* --- Scene 5: Sampling --- */
+    .flying-word {
+      position: absolute; font-size: 1.2rem; color: var(--success); font-weight: bold;
+      pointer-events: none; transition: all 0.8s ease-in-out; z-index: 100;
+    }
+
+    /* Animations */
+    @keyframes slideDown { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes popIn { 0% { transform: scale(0); } 80% { transform: scale(1.1); } 100% { transform: scale(1); } }
+    @keyframes flowRight { 0% { left: -10%; opacity: 0; } 50% { opacity: 1; } 100% { left: 110%; opacity: 0; } }
+    @keyframes ctxDrift {
+      0%   { left: -10%; opacity: 0; }
+      20%  { opacity: 0.9; }
+      80%  { opacity: 0.75; }
+      100% { left: 110%; opacity: 0; }
+    }
+
+    /* Responsive */
+    @media (max-width: 1100px) {
+      .process-layout { grid-template-columns: 1fr; }
+      .panel.scrollable { max-height: 360px; }
+      .kv-grid { grid-template-columns: 1fr; }
+      .kv-panel { grid-column: span 1 !important; }
+    }
+    @media (max-width: 980px) {
+      body { overflow: auto; height: auto; }
+      .sidebar { display: none; }
+      .stage { padding: 22px 16px; }
+      .attn-area { height: 300px; }
+      .kv-chart { height: 220px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="sidebar">
+    <div class="logo">🧠 LLM CORE</div>
+
+    <div class="nav-item active" onclick="goToStep(1)" id="nav1">
+      <div>1. Tokenization</div>
+      <div style="font-size: 0.75rem; opacity: 0.6; margin-top: 4px;">Text → Tokens → Embeddings</div>
+    </div>
+
+    <div class="nav-item" onclick="goToStep(2)" id="nav2">
+      <div>2. Encoding</div>
+      <div style="font-size: 0.75rem; opacity: 0.6; margin-top: 4px;">Attention + Feed Forward</div>
+    </div>
+
+    <div class="nav-item" onclick="goToStep(3)" id="nav3">
+      <div>3. Optimization</div>
+      <div style="font-size: 0.75rem; opacity: 0.6; margin-top: 4px;">KV Cache for Efficiency</div>
+    </div>
+
+    <div class="nav-item" onclick="goToStep(4)" id="nav4">
+      <div>4. Prediction</div>
+      <div style="font-size: 0.75rem; opacity: 0.6; margin-top: 4px;">Logits → Probabilities</div>
+    </div>
+
+    <div class="nav-item" onclick="goToStep(5)" id="nav5">
+      <div>5. Generation</div>
+      <div style="font-size: 0.75rem; opacity: 0.6; margin-top: 4px;">Sampling & Autoregressive</div>
+    </div>
+
+    <div style="margin-top: auto; padding-top: 20px; border-top: 1px solid var(--border); font-size: 0.8rem; color: var(--text-sub);">
+      Interactive Visualizer
+    </div>
+  </div>
+
+  <div class="stage">
+
+    <!-- ============ Scene 1 ============ -->
+    <div id="scene1" class="scene active">
+      <div class="header-section">
+        <span class="badge">Tokenization Stage</span>
+        <h1>Input: Human text → model tokens</h1>
+        <p class="subtitle">The model doesn't "read letters". It splits your prompt into tokens and turns them into vectors (embeddings). Click any token on the right.</p>
+      </div>
+
+      <div class="lab-card">
+        <div class="io-container">
+          <div class="io-box">
+            <div class="io-label">User Prompt (Editable)</div>
+            <textarea class="token-input" id="tokenInput" oninput="updateTokens()">Today the weather is great, I want to go</textarea>
+          </div>
+
+          <div style="display: flex; flex-direction: column; justify-content: center; color: var(--text-sub);">
+            ➜ <br> split <br> ➜
+          </div>
+
+          <div class="io-box" style="background: rgba(59, 130, 246, 0.10); border-color: rgba(59,130,246,0.45);">
+            <div class="io-label">Model Tokens (IDs) - Click</div>
+            <div class="token-grid" id="tokenOutput"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <div style="color: var(--text-sub);">
+          Context length: <span id="tokenCount" style="color: white; font-weight: bold;">0</span> tokens
+          <span id="tokenHint" style="margin-left:10px; color: rgba(16,185,129,0.9); font-weight:800;"></span>
+        </div>
+        <button class="btn-primary" onclick="goToStep(2)">Next: Encoding ➜</button>
+      </div>
+    </div>
+
+    <!-- ============ Scene 2 ============ -->
+    <div id="scene2" class="scene">
+      <div class="header-section">
+        <span class="badge">Encoding Stage</span>
+        <h1>Processing: Attention mixes context, FFN transforms features</h1>
+        <p class="subtitle">
+          Think of each Transformer layer as one round of "reading":
+          <b>Attention</b> decides what to focus on, and <b>FFN</b> transforms the mixed information.
+        </p>
+      </div>
+
+      <div class="lab-card">
+        <div class="process-layout">
+          <!-- Left: attention demo -->
+          <div class="panel">
+            <div class="panel-title">
+              <span>Attention Visualization (click a token)</span>
+              <span class="pill">Layer: <strong id="layerNow">8</strong> / 32</span>
+            </div>
+
+            <div class="mini-help">
+              Click any token to draw the tokens it "attends to" (simplified). Deeper layers look more global/abstract.
+            </div>
+
+            <div class="layer-slider">
+              <div class="slider-container" style="margin-top:10px;">
+                <span style="font-size:0.9rem;">🧱 Layer</span>
+                <input id="layerSlider" type="range" min="1" max="32" step="1" value="8" oninput="setLayer(this.value)">
+                <span class="pill" id="layerExplain">Shallow: local links</span>
+              </div>
+              <div class="pill">Tip: click tokens to see edges</div>
+            </div>
+
+            <div class="attn-area" id="attnArea">
+              <svg class="attn-svg" id="attnSvg"></svg>
+              <div class="attn-row" id="attnTokens"></div>
+            </div>
+
+            <div class="hint-card" id="attnHint">
+              <b>Intuition:</b> Attention is a "highlighter" — it decides which past tokens matter most for predicting the next token.
+            </div>
+          </div>
+
+          <!-- Right: scrollable panel -->
+          <div class="panel scrollable">
+            <div class="panel-title">
+              <span>What happens inside one layer?</span>
+              <span class="pill">repeat × 32 layers</span>
+            </div>
+
+            <div class="layer-stack">
+              <div class="model-layer">
+                <div class="data-flow-particle" style="animation-delay: 0s;"></div>
+                Self-Attention: mix context (who relates to whom)
+              </div>
+              <div class="model-layer">
+                <div class="data-flow-particle" style="animation-delay: 0.55s;"></div>
+                FFN: transform features (more "answer-like")
+              </div>
+              <div class="model-layer">
+                <div class="data-flow-particle" style="animation-delay: 1.1s;"></div>
+                Norm + Residual: stabilize updates
+              </div>
+            </div>
+
+            <div class="hint-card" id="ffnHint" style="margin-top:14px;">
+              <b>FFN intuition:</b> a feature "factory". Attention gathers relevant context, FFN reshapes it into higher-level meaning.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button class="btn-ghost" onclick="goToStep(1)">← Back</button>
+        <button class="btn-primary" onclick="goToStep(3)">Next: Optimization ➜</button>
+      </div>
+    </div>
+
+    <!-- ============ Scene 3: Efficiency / KV Cache ============ -->
+    <div id="scene3" class="scene">
+      <div class="header-section">
+        <span class="badge">Optimization Stage</span>
+        <h1>KV Cache & Computational Efficiency</h1>
+        <p class="subtitle">
+          <b>KV cache</b> stores past attention keys/values to avoid recomputation. 
+          See how much compute it saves during autoregressive generation!
+        </p>
+      </div>
+
+      <div class="lab-card">
+        <div class="kv-topline">
+          <div class="kv-prompt-box">
+            <div style="min-width:0;">
+              <b>Scenario:</b> <span id="kvPromptText" style="color: rgba(248,250,252,0.92);">Generate 24 tokens after an 8-token prompt</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="kv-controls">
+          <div class="slider-container">
+            <span style="font-size:0.9rem;">✏️ Prompt length: <span id="kvPromptLenVal" style="color:var(--accent); font-weight:900;">8</span></span>
+            <input id="kvPromptLen" type="range" min="2" max="128" step="1" value="8" oninput="renderEfficiency()">
+          </div>
+
+          <div class="slider-container">
+            <span style="font-size:0.9rem;">⏱️ Generate tokens: <span id="kvStepsVal" style="color:var(--accent); font-weight:900;">24</span></span>
+            <input id="kvSteps" type="range" min="1" max="128" step="1" value="24" oninput="renderEfficiency()">
+          </div>
+        </div>
+
+        <div class="kv-tip">
+          <b>⚡ How it works:</b> Without cache, each token requires O(n²) attention recomputation over the growing context. 
+          With cache, only O(n) work per token. The difference grows dramatically with context length!
+        </div>
+
+        <div class="kv-grid">
+          <!-- Compute Cost Chart -->
+          <div class="kv-panel">
+            <div class="kv-panel-head">
+              <div class="t">Compute Cost</div>
+              <div class="kv-metric">
+                <span>Savings:</span>
+                <b id="kvSavings" style="color:#10b981;">—</b>
+              </div>
+            </div>
+            <div style="height: 260px; width: 100%; position:relative; margin-top:12px;">
+              <canvas id="kvComparisonChart" style="width:100%; height:100%;"></canvas>
+            </div>
+          </div>
+
+          <!-- Memory Chart -->
+          <div class="kv-panel">
+            <div class="kv-panel-head">
+              <div class="t">Memory Storage</div>
+              <div class="kv-metric">
+                <span>Final:</span>
+                <b id="kvMemoryInfo" style="color:#10b981;">—</b>
+              </div>
+            </div>
+            <div style="height: 260px; width: 100%; position:relative; margin-top:12px;">
+              <canvas id="kvMemoryChart" style="width:100%; height:100%;"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button class="btn-ghost" onclick="goToStep(2)">← Back</button>
+        <button class="btn-primary" onclick="goToStep(4)">Next: Prediction ➜</button>
+      </div>
+    </div>
+
+    <!-- ============ Scene 4: Logits Chart ============ -->
+    <div id="scene4" class="scene">
+      <div class="header-section">
+        <span class="badge">Prediction Stage</span>
+        <h1>Scoring: the model "hesitates" between a few good continuations</h1>
+        <p class="subtitle">
+          Here we show context-aware candidates (so they actually fit your input). Adjust <b>Top-K</b> and <b>Temperature</b>.
+        </p>
+      </div>
+
+      <div class="lab-card">
+        <div class="context-window" id="previewContext">
+          <div class="ctx-flow" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+          <span style="position:relative; z-index:2;" id="previewText">Today the weather is great, I want to go...</span>
+        </div>
+
+        <div class="controls-row">
+          <div class="k-buttons">
+            <div class="k-btn" onclick="setTopK(3)" id="k3b">Top-3</div>
+            <div class="k-btn active" onclick="setTopK(5)" id="k5b">Top-5</div>
+            <div class="k-btn" onclick="setTopK(8)" id="k8b">Top-8</div>
+          </div>
+
+          <div class="slider-container">
+            <span style="font-size:0.9rem;">🌡️ Temperature: <span id="tempVal4" style="color:var(--accent); font-weight:900;">0.7</span></span>
+            <input type="range" min="0.1" max="1.5" step="0.1" value="0.7" oninput="updateTempAll(this.value)">
+          </div>
+
+          <div class="pill">Click a bar (manual pick)</div>
+        </div>
+
+        <div class="chart-wrap">
+          <div class="prob-chart" id="staticChart"></div>
+        </div>
+
+        <div style="margin-top: 10px; color: rgba(148,163,184,0.92); font-size: 0.95rem; line-height: 1.45;">
+          Tip: these candidates are generated from your prompt (rule-based), so they form a reasonable continuation.
+        </div>
+      </div>
+
+      <div class="controls">
+        <button class="btn-ghost" onclick="goToStep(3)">← Back</button>
+        <button class="btn-primary" onclick="goToStep(5)">Next: Generation ➜</button>
+      </div>
+    </div>
+
+    <!-- ============ Scene 5: Sampling ============ -->
+    <div id="scene5" class="scene">
+      <div class="header-section">
+        <span class="badge">Generation Stage</span>
+        <h1>Generation: sampling + autoregressive loop</h1>
+        <p class="subtitle">
+          We sample one token from the probability distribution. The chosen token is appended to the context,
+          then we predict again — that's autoregressive generation.
+        </p>
+      </div>
+
+      <div class="lab-card">
+        <div class="context-window" id="genContext">
+          <span style="color:var(--text-sub)">[Prompt]</span> Today the weather is great, I want to go
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
+          <div class="slider-container">
+            <span style="font-size: 0.9rem;">🌡️ Temperature: <span id="tempVal" style="color:var(--accent); font-weight:bold;">0.7</span></span>
+            <input type="range" min="0.1" max="1.5" step="0.1" value="0.7" oninput="updateTempAll(this.value)">
+          </div>
+          <div style="font-size: 0.82rem; color: var(--text-sub); text-align: right;">
+            Low T = sharper (more deterministic)<br>High T = flatter (more diverse)
+          </div>
+        </div>
+
+        <div class="prob-chart" id="dynamicChart" style="height: 180px;"></div>
+
+        <div style="text-align: center; margin-top: 18px;">
+          <button class="btn-primary" style="margin: 0 auto; width: 220px; justify-content: center; font-size: 1.08rem;" onclick="generateStep()">
+            🎲 Generate next token
+          </button>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button class="btn-ghost" onclick="resetGen()">↺ Reset context</button>
+        <div style="color: var(--text-sub);">Click "Generate" to see the loop</div>
+      </div>
+    </div>
+
+  </div>
+
+<script>
+  // ---------------------------
+  // Global State
+  // ---------------------------
+  let currentStep = 1;
+  let baseContext = "Today the weather is great, I want to go";
+  let currentContext = baseContext;
+
+  let temperature = 0.7;     // shared for scenes 4/5
+  let topK = 5;              // shared for scene 4
+  let currentLayer = 8;      // for scene 2
+
+  const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#60a5fa', '#22c55e', '#fb7185'];
+
+  // ---------------------------
+  // Navigation
+  // ---------------------------
+  function goToStep(step) {
+    document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+    document.getElementById(`nav${step}`).classList.add('active');
+
+    document.querySelectorAll('.scene').forEach(el => el.classList.remove('active'));
+    document.getElementById(`scene${step}`).classList.add('active');
+
+    if (step === 2) renderProcess();
+    if (step === 3) renderEfficiency();
+    if (step === 4) renderStaticChart();
+    if (step === 5) updateGenChart();
+
+    currentStep = step;
+  }
+
+  // ---------------------------
+  // Scene 1: Tokenizer (mock)
+  // ---------------------------
+  function mockTokenizer(text) {
+    return text.match(/[\u4e00-\u9fa5]|[a-zA-Z]+|[0-9]+|[''"-]+|[，。！？,.!?]/g) || [];
+  }
+
+  function updateTokens() {
+    const text = document.getElementById('tokenInput').value.trim();
+    currentContext = text || "";
+    baseContext = currentContext;
+
+    const tokens = mockTokenizer(currentContext);
+    document.getElementById('tokenCount').innerText = tokens.length;
+
+    const output = document.getElementById('tokenOutput');
+    output.innerHTML = '';
+
+    tokens.forEach((t, i) => {
+      const chip = document.createElement('div');
+      chip.className = 'token-chip';
+      const color = colors[i % colors.length];
+      chip.style.borderColor = color;
+      chip.style.backgroundColor = `${color}22`;
+      chip.style.color = 'white';
+      chip.innerHTML = `${t} <span style="font-size:0.72em; opacity:0.7">#${1000+i}</span>`;
+      chip.onclick = () => {
+        document.querySelectorAll('.token-chip').forEach(x => x.classList.remove('active'));
+        chip.classList.add('active');
+        document.getElementById('tokenHint').innerText = `Selected token: "${t}"`;
+      };
+      output.appendChild(chip);
+    });
+
+    const preview = (currentContext || "(empty)") + "...";
+    document.getElementById('previewText').innerText = preview;
+
+    document.getElementById('genContext').innerHTML =
+      `<span style="color:var(--text-sub)">[Prompt]</span> ` + (currentContext || "(empty)");
+
+    renderProcessTokens(tokens);
+    clearAttention();
+
+    // Efficiency page defaults: tie promptLen to token count (with bounds)
+    const kvLen = Math.max(2, Math.min(128, tokens.length || 8));
+    const kvPromptLen = document.getElementById('kvPromptLen');
+    kvPromptLen.value = kvLen;
+    document.getElementById('kvPromptLenVal').innerText = kvLen;
+
+    // Update efficiency page scenario text
+    const kvSteps = parseInt(document.getElementById('kvSteps').value, 10);
+    document.getElementById('kvPromptText').innerText = `Generate ${kvSteps} tokens after a ${kvLen}-token prompt`;
+
+    if (currentStep === 3) renderEfficiency();
+    if (currentStep === 4) renderStaticChart();
+    if (currentStep === 5) updateGenChart();
+  }
+
+  updateTokens();
+
+  // ---------------------------
+  // Context-aware candidate generator (rule-based)
+  // ---------------------------
+  function stableHash(str) {
+    let h = 2166136261;
+    for (let i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return (h >>> 0);
+  }
+
+  function normalizeSpace(s) { return (s || "").replace(/\s+/g, " ").trim(); }
+  function endsWithWord(ctx, re) { return re.test(normalizeSpace(ctx).toLowerCase()); }
+
+  function inferSlot(ctx) {
+    const c = normalizeSpace(ctx).toLowerCase();
+    if (endsWithWord(c, /(i want to go|want to go|let's go|lets go|we should go)$/)) return "location";
+    if (endsWithWord(c, /(go to|going to)$/)) return "place";
+    if (endsWithWord(c, /(i want to|want to|i'd like to|i would like to)$/)) return "action";
+    if (endsWithWord(c, /(i want|i wanna|i would like)$/)) return "action";
+    if (endsWithWord(c, /(i want to eat|want to eat|let's eat|lets eat)$/)) return "food";
+    if (endsWithWord(c, /(i feel|i am feeling)$/)) return "feeling";
+    if (c.includes("weather") || c.includes("sunny") || c.includes("great")) return "outdoor";
+    return "generic";
+  }
+
+  function generateCandidates(ctx) {
+    const slot = inferSlot(ctx);
+    const c = normalizeSpace(ctx).toLowerCase();
+    const h = stableHash(c || "empty");
+    const jitter = (i) => ((h % (97 + i * 17)) / 1000);
+
+    const LOC_OUTDOOR = ["the park", "the beach", "the mountains", "a lakeside trail", "the riverwalk", "a rooftop café"];
+    const LOC_INDOOR  = ["the library", "a museum", "a bookstore", "a coffee shop", "a quiet gallery"];
+    const ACTIONS     = ["for a walk", "hiking", "to relax", "to take photos", "to meet friends", "to read"];
+    const FOODS       = ["ramen", "pizza", "sushi", "hotpot", "tacos", "dessert"];
+    const GENERIC     = ["there", "somewhere nice", "somewhere quiet", "outside", "home"];
+
+    const isOutdoorMood = /weather|sunny|great|nice|warm|blue sky/.test(c);
+    const isStudyMood   = /study|work|deadline|report|paper/.test(c);
+    const isTiredMood   = /tired|sleepy|exhausted|rest/.test(c);
+
+    let candidates = [];
+
+    if (slot === "location" || slot === "place") {
+      const base = (isOutdoorMood ? LOC_OUTDOOR : LOC_INDOOR);
+      const alt  = (isOutdoorMood ? LOC_INDOOR : LOC_OUTDOOR);
+      const pick = [...base, ...alt, ...GENERIC].slice(0, 10);
+      candidates = pick.map((t, i) => ({
+        text: t,
+        score: 1.15 - i * 0.13
+          + (isOutdoorMood && LOC_OUTDOOR.includes(t) ? 0.18 : 0)
+          + (isStudyMood && t.includes("library") ? 0.20 : 0)
+          - (isTiredMood && !t.includes("home") ? 0.08 : 0)
+          + jitter(i)
+      }));
+    } else if (slot === "action") {
+      const base = (isOutdoorMood ? ACTIONS : ACTIONS.concat(["to watch a movie", "to take a nap"]));
+      const pick = [...base, ...GENERIC].slice(0, 10);
+      candidates = pick.map((t, i) => ({
+        text: t,
+        score: 1.05 - i * 0.12
+          + (isStudyMood && t.includes("read") ? 0.18 : 0)
+          + (isTiredMood && t.includes("nap") ? 0.22 : 0)
+          + jitter(i)
+      }));
+    } else if (slot === "food") {
+      candidates = FOODS.map((t, i) => ({ text: t, score: 1.02 - i * 0.10 + jitter(i) }));
+      candidates.push({ text: "something light", score: 0.42 + jitter(9) });
+      candidates.push({ text: "something spicy", score: 0.55 + jitter(10) });
+    } else if (slot === "outdoor") {
+      const outs = [
+        { text: "outside", score: 0.95 },
+        { text: "for a walk", score: 0.88 },
+        { text: "to the park", score: 0.82 },
+        { text: "somewhere sunny", score: 0.64 },
+        { text: "to grab coffee", score: 0.58 },
+        { text: "to take photos", score: 0.52 },
+        { text: "home", score: 0.30 }
+      ];
+      candidates = outs.map((x, i) => ({ ...x, score: x.score + jitter(i) }));
+    } else {
+      candidates = GENERIC.map((t, i) => ({ text: t, score: 0.75 - i * 0.09 + jitter(i) }));
+      candidates.push({ text: "next", score: 0.22 + jitter(7) });
+      candidates.push({ text: "...", score: 0.12 + jitter(8) });
+    }
+
+    return candidates
+      .map(c => ({ ...c, score: Math.max(0.01, Number.isFinite(c.score) ? c.score : 0.01) }))
+      .slice(0, 12);
+  }
+
+  // ---------------------------
+  // Softmax with Temperature
+  // ---------------------------
+  function getProbabilities(candidates, temp) {
+    const t = Math.max(0.05, temp);
+    const logits = candidates.map(c => Math.exp(c.score / t));
+    const sum = logits.reduce((a, b) => a + b, 0) || 1;
+    return candidates.map((c, i) => ({ text: c.text, prob: (logits[i] / sum), raw: c.score }));
+  }
+
+  function cssSafeId(s) { return String(s).replace(/[^a-zA-Z0-9_-]/g, '_'); }
+
+  // ---------------------------
+  // Scene 2: Process - Attention Demo
+  // ---------------------------
+  function renderProcess() {
+    setLayer(currentLayer);
+    const toks = mockTokenizer(currentContext);
+    if (toks.length > 0) focusAttention(toks.length - 1);
+  }
+
+  function renderProcessTokens(tokens) {
+    const cont = document.getElementById('attnTokens');
+    if (!cont) return;
+    cont.innerHTML = '';
+    tokens.forEach((t, i) => {
+      const el = document.createElement('div');
+      el.className = 'attn-chip';
+      el.dataset.idx = i;
+      el.innerHTML = `<span class="dot"></span><span>${t}</span>`;
+      el.onclick = () => focusAttention(i);
+      cont.appendChild(el);
+    });
+  }
+
+  function setLayer(val) {
+    currentLayer = parseInt(val, 10);
+    document.getElementById('layerNow').innerText = currentLayer;
+
+    const layerExplain = document.getElementById('layerExplain');
+    const ffHint = document.getElementById('ffnHint');
+
+    if (currentLayer <= 8) {
+      layerExplain.innerHTML = "Shallow: local links";
+      ffHint.innerHTML = `<b>FFN intuition:</b> short-range pattern mixing (syntax & phrasing).`;
+    } else if (currentLayer <= 20) {
+      layerExplain.innerHTML = "Mid: semantic mixing";
+      ffHint.innerHTML = `<b>FFN intuition:</b> common-sense feature shaping (meaning & intent).`;
+    } else {
+      layerExplain.innerHTML = "Deep: intent & style";
+      ffHint.innerHTML = `<b>FFN intuition:</b> steering the answer style (instruction, dialogue, narrative).`;
+    }
+
+    const active = document.querySelector('.attn-chip.active');
+    if (active) focusAttention(parseInt(active.dataset.idx, 10));
+  }
+
+  function clearAttention() {
+    const svg = document.getElementById('attnSvg');
+    if (svg) svg.innerHTML = '';
+    document.querySelectorAll('.attn-chip').forEach(x => x.classList.remove('active'));
+  }
+
+  function focusAttention(idx) {
+    const area = document.getElementById('attnArea');
+    const svg = document.getElementById('attnSvg');
+    const chips = Array.from(document.querySelectorAll('.attn-chip'));
+    if (!area || !svg || chips.length === 0) return;
+
+    chips.forEach(c => c.classList.remove('active'));
+    const centerChip = chips[idx];
+    if (!centerChip) return;
+    centerChip.classList.add('active');
+
+    const n = chips.length;
+    const weights = new Array(n).fill(0);
+    const span = currentLayer <= 8 ? 3 : (currentLayer <= 20 ? 5 : 999);
+
+    for (let j = 0; j < n; j++) {
+      const dist = Math.abs(j - idx);
+      let w;
+      if (span === 999) {
+        const tokenText = chips[j].innerText.trim().toLowerCase();
+        const keywordBoost = /weather|great|want|go|today/.test(tokenText) ? 1.8 : 1.0;
+        w = Math.exp(-dist / 6) * keywordBoost;
+      } else {
+        w = dist > span ? 0.02 : Math.exp(-dist / (span / 2));
+      }
+      weights[j] = w;
+    }
+
+    const sum = weights.reduce((a,b)=>a+b,0) || 1;
+    for (let j=0;j<n;j++) weights[j] /= sum;
+
+    const edges = weights
+      .map((w, j)=>({ j, w }))
+      .filter(x => x.j !== idx)
+      .sort((a,b)=>b.w-a.w)
+      .slice(0, Math.min(5, n-1));
+
+    svg.innerHTML = '';
+    const areaRect = area.getBoundingClientRect();
+    const cRect = centerChip.getBoundingClientRect();
+    const cx = (cRect.left - areaRect.left) + cRect.width/2;
+    const cy = (cRect.top - areaRect.top) + cRect.height/2;
+
+    edges.forEach((e, k) => {
+      const tRect = chips[e.j].getBoundingClientRect();
+      const tx = (tRect.left - areaRect.left) + tRect.width/2;
+      const ty = (tRect.top - areaRect.top) + tRect.height/2;
+
+      const opacity = Math.min(0.95, 0.20 + e.w * 3.0);
+      const width = 1.5 + e.w * 10;
+
+      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      const dx = (tx - cx);
+      const dy = (ty - cy);
+      const mx = cx + dx * 0.5;
+      const my = cy + dy * 0.5 - 30;
+
+      path.setAttribute("d", `M ${cx} ${cy} Q ${mx} ${my} ${tx} ${ty}`);
+      path.setAttribute("fill", "none");
+      path.setAttribute("stroke", k % 2 === 0 ? `rgba(59,130,246,${opacity})` : `rgba(16,185,129,${opacity})`);
+      path.setAttribute("stroke-width", width.toFixed(2));
+      path.setAttribute("stroke-linecap", "round");
+      svg.appendChild(path);
+
+      const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      dot.setAttribute("cx", tx);
+      dot.setAttribute("cy", ty);
+      dot.setAttribute("r", Math.max(3, 2 + e.w * 10));
+      dot.setAttribute("fill", "rgba(16,185,129,0.8)");
+      svg.appendChild(dot);
+    });
+
+    const toks = mockTokenizer(currentContext);
+    const focusTok = toks[idx] ?? "";
+    const topTok = edges.map(e => toks[e.j]).filter(Boolean).join(", ");
+    const mode = currentLayer <= 8 ? "local" : (currentLayer <= 20 ? "semantic" : "abstract");
+    document.getElementById('attnHint').innerHTML =
+      `<b>Focus:</b> "${focusTok}"<br>` +
+      `<b>Attends to:</b> ${topTok || "(none)"}<br>` +
+      `<b>Layer style:</b> ${mode} (Layer ${currentLayer}/32)`;
+  }
+
+  window.addEventListener('resize', () => {
+    const active = document.querySelector('.attn-chip.active');
+    if (active) focusAttention(parseInt(active.dataset.idx, 10));
+    if (currentStep === 3) {
+      // Redraw the comparison chart on resize
+      setTimeout(renderEfficiency, 100);
+    }
+  });
+
+  // ---------------------------
+  // Scene 3: Efficiency / KV Cache - Redesigned
+  // ---------------------------
+  function renderEfficiency(){
+    const promptLen = parseInt(document.getElementById('kvPromptLen').value, 10);
+    const steps = parseInt(document.getElementById('kvSteps').value, 10);
+
+    document.getElementById('kvPromptLenVal').innerText = promptLen;
+    document.getElementById('kvStepsVal').innerText = steps;
+
+    const preview = `Generate ${steps} tokens after a ${promptLen}-token prompt`;
+    document.getElementById('kvPromptText').innerText = preview;
+
+    // Calculate cumulative costs
+    const cumulativeWith = [];
+    const cumulativeWithout = [];
+    let sumWith = 0;
+    let sumWithout = 0;
+
+    for(let step = 1; step <= steps; step++){
+      const contextLen = promptLen + step;
+      const stepCostWith = contextLen;              // O(n)
+      const stepCostWithout = contextLen * contextLen; // O(n²)
+      
+      sumWith += stepCostWith;
+      sumWithout += stepCostWithout;
+      
+      cumulativeWith.push(sumWith);
+      cumulativeWithout.push(sumWithout);
+    }
+
+    const totalWith = cumulativeWith[cumulativeWith.length - 1];
+    const totalWithout = cumulativeWithout[cumulativeWithout.length - 1];
+    const savings = ((totalWithout - totalWith) / totalWithout * 100).toFixed(1);
+    const speedup = (totalWithout / totalWith).toFixed(1);
+
+    // Update metrics
+    document.getElementById('kvSavings').innerText = `${savings}% (${speedup}× faster)`;
+
+    // Memory: With cache stores all K/V, without cache only stores current tokens (minimal)
+    const memoryWith = [];
+    const memoryWithout = [];
+    for(let step = 1; step <= steps; step++){
+      const totalTokens = promptLen + step;
+      memoryWith.push(totalTokens);           // Full KV cache
+      memoryWithout.push(Math.ceil(totalTokens * 0.1));  // Only tokens + minimal overhead (~10%)
+    }
+    
+    const finalMemWith = promptLen + steps;
+    const finalMemWithout = Math.ceil((promptLen + steps) * 0.1);
+    document.getElementById('kvMemoryInfo').innerText = 
+      `${finalMemWith} vs ${finalMemWithout} tokens (10× less)`;
+
+    // Draw charts
+    drawComparisonChart(cumulativeWith, cumulativeWithout, steps);
+    drawMemoryChart(memoryWith, memoryWithout, steps);
+  }
+
+  function drawComparisonChart(dataWith, dataWithout, steps) {
+    const canvas = document.getElementById('kvComparisonChart');
+    if (!canvas || !canvas.getContext) return;
+    
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    ctx.scale(dpr, dpr);
+    
+    const width = rect.width;
+    const height = rect.height;
+    const padding = { top: 20, right: 30, bottom: 40, left: 60 };
+    const chartWidth = width - padding.left - padding.right;
+    const chartHeight = height - padding.top - padding.bottom;
+
+    // Clear
+    ctx.clearRect(0, 0, width, height);
+
+    // Find max for scaling
+    const maxVal = Math.max(...dataWithout);
+    const maxDisplay = maxVal * 1.1;
+
+    // Draw grid
+    ctx.strokeStyle = 'rgba(148,163,184,0.1)';
+    ctx.lineWidth = 1;
+    const gridLines = 5;
+    for (let i = 0; i <= gridLines; i++) {
+      const y = padding.top + (chartHeight / gridLines) * i;
+      ctx.beginPath();
+      ctx.moveTo(padding.left, y);
+      ctx.lineTo(padding.left + chartWidth, y);
+      ctx.stroke();
+    }
+
+    // Draw axes
+    ctx.strokeStyle = 'rgba(148,163,184,0.3)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(padding.left, padding.top);
+    ctx.lineTo(padding.left, padding.top + chartHeight);
+    ctx.lineTo(padding.left + chartWidth, padding.top + chartHeight);
+    ctx.stroke();
+
+    // Draw lines
+    function drawLine(data, color, lineWidth) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = lineWidth;
+      ctx.beginPath();
+      
+      data.forEach((val, i) => {
+        const x = padding.left + (chartWidth / (data.length - 1)) * i;
+        const y = padding.top + chartHeight - (val / maxDisplay) * chartHeight;
+        
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      
+      ctx.stroke();
+
+      // Add glow effect
+      ctx.shadowBlur = 8;
+      ctx.shadowColor = color;
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+
+    // Draw WITHOUT cache line (red)
+    drawLine(dataWithout, 'rgba(239,68,68,0.9)', 3);
+    
+    // Draw WITH cache line (blue)
+    drawLine(dataWith, 'rgba(59,130,246,0.9)', 3);
+
+    // Labels
+    ctx.fillStyle = 'rgba(148,163,184,0.85)';
+    ctx.font = '11px Inter, sans-serif';
+    ctx.textAlign = 'center';
+    
+    // X-axis labels
+    const xLabels = ['1', Math.floor(steps/2).toString(), steps.toString()];
+    xLabels.forEach((label, i) => {
+      const x = padding.left + (chartWidth / (xLabels.length - 1)) * i;
+      ctx.fillText(label, x, height - 12);
+    });
+    
+    // X-axis title
+    ctx.fillText('Generation Step', width / 2, height - 2);
+
+    // Y-axis labels
+    ctx.textAlign = 'right';
+    for (let i = 0; i <= gridLines; i++) {
+      const val = (maxDisplay / gridLines) * (gridLines - i);
+      const y = padding.top + (chartHeight / gridLines) * i;
+      const label = val >= 1000 ? (val/1000).toFixed(0) + 'k' : val.toFixed(0);
+      ctx.fillText(label, padding.left - 10, y + 4);
+    }
+
+    // Y-axis title
+    ctx.save();
+    ctx.translate(12, height / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.textAlign = 'center';
+    ctx.fillText('Cumulative Compute', 0, 0);
+    ctx.restore();
+  }
+
+  function drawMemoryChart(dataWith, dataWithout, steps) {
+    const canvas = document.getElementById('kvMemoryChart');
+    if (!canvas || !canvas.getContext) return;
+    
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    ctx.scale(dpr, dpr);
+    
+    const width = rect.width;
+    const height = rect.height;
+    const padding = { top: 20, right: 30, bottom: 40, left: 60 };
+    const chartWidth = width - padding.left - padding.right;
+    const chartHeight = height - padding.top - padding.bottom;
+
+    // Clear
+    ctx.clearRect(0, 0, width, height);
+
+    // Find max for scaling (use WITH cache as baseline since it's larger)
+    const maxVal = Math.max(...dataWith);
+    const maxDisplay = maxVal * 1.1;
+
+    // Draw grid
+    ctx.strokeStyle = 'rgba(148,163,184,0.1)';
+    ctx.lineWidth = 1;
+    const gridLines = 5;
+    for (let i = 0; i <= gridLines; i++) {
+      const y = padding.top + (chartHeight / gridLines) * i;
+      ctx.beginPath();
+      ctx.moveTo(padding.left, y);
+      ctx.lineTo(padding.left + chartWidth, y);
+      ctx.stroke();
+    }
+
+    // Draw axes
+    ctx.strokeStyle = 'rgba(148,163,184,0.3)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(padding.left, padding.top);
+    ctx.lineTo(padding.left, padding.top + chartHeight);
+    ctx.lineTo(padding.left + chartWidth, padding.top + chartHeight);
+    ctx.stroke();
+
+    // Draw lines
+    function drawLine(data, color, lineWidth) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = lineWidth;
+      ctx.beginPath();
+      
+      data.forEach((val, i) => {
+        const x = padding.left + (chartWidth / (data.length - 1)) * i;
+        const y = padding.top + chartHeight - (val / maxDisplay) * chartHeight;
+        
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      
+      ctx.stroke();
+
+      // Add glow effect
+      ctx.shadowBlur = 8;
+      ctx.shadowColor = color;
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+
+    // Draw WITH cache line (green) - larger
+    drawLine(dataWith, 'rgba(16,185,129,0.9)', 3);
+    
+    // Draw WITHOUT cache line (gray) - minimal
+    drawLine(dataWithout, 'rgba(148,163,184,0.7)', 3);
+
+    // Labels
+    ctx.fillStyle = 'rgba(148,163,184,0.85)';
+    ctx.font = '11px Inter, sans-serif';
+    ctx.textAlign = 'center';
+    
+    // X-axis labels
+    const xLabels = ['1', Math.floor(steps/2).toString(), steps.toString()];
+    xLabels.forEach((label, i) => {
+      const x = padding.left + (chartWidth / (xLabels.length - 1)) * i;
+      ctx.fillText(label, x, height - 12);
+    });
+    
+    // X-axis title
+    ctx.fillText('Generation Step', width / 2, height - 2);
+
+    // Y-axis labels (show token counts)
+    ctx.textAlign = 'right';
+    for (let i = 0; i <= gridLines; i++) {
+      const val = (maxDisplay / gridLines) * (gridLines - i);
+      const y = padding.top + (chartHeight / gridLines) * i;
+      const label = val >= 1000 ? (val/1000).toFixed(1) + 'k' : val.toFixed(0);
+      ctx.fillText(label, padding.left - 10, y + 4);
+    }
+
+    // Y-axis title
+    ctx.save();
+    ctx.translate(12, height / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.textAlign = 'center';
+    ctx.fillText('Memory (tokens)', 0, 0);
+    ctx.restore();
+  }
+
+  function renderKVBarChart(containerId, arrNorm, buckets, color){
+    const container = document.getElementById(containerId);
+    if(!container) return;
+    container.innerHTML = '';
+
+    const N = arrNorm.length;
+    if(N === 0) return;
+
+    const B = Math.min(buckets, Math.max(6, N));
+    for(let i=0; i<B; i++){
+      const start = Math.floor(i * N / B);
+      const end = Math.floor((i+1) * N / B);
+      const slice = arrNorm.slice(start, Math.max(end, start+1));
+      const v = slice.reduce((a,b)=>a+b,0) / slice.length;
+
+      const bar = document.createElement('div');
+      bar.className = 'kv-bar';
+      bar.style.background = color;
+      const h = Math.max(2, v * 100);
+      bar.style.height = `${h}%`;
+      container.appendChild(bar);
+    }
+  }
+
+  // ---------------------------
+  // Shared Top-K controls (Scene 4)
+  // ---------------------------
+  function syncTopKButtons() {
+    document.getElementById('k3b').classList.toggle('active', topK === 3);
+    document.getElementById('k5b').classList.toggle('active', topK === 5);
+    document.getElementById('k8b').classList.toggle('active', topK === 8);
+  }
+
+  function setTopK(k) {
+    topK = k;
+    syncTopKButtons();
+    if (currentStep === 4) renderStaticChart();
+  }
+
+  // ---------------------------
+  // Scene 4: Logits Chart
+  // ---------------------------
+  function renderBars(containerId, data, interactive=false, animate=false) {
+    const container = document.getElementById(containerId);
+    container.innerHTML = '';
+
+    data.sort((a,b) => b.prob - a.prob);
+
+    data.forEach((d, i) => {
+      const group = document.createElement('div');
+      group.className = 'prob-bar-group';
+
+      const pct = (d.prob * 100);
+      const height = Math.max(pct, 2);
+
+      const barClass = `prob-bar${animate ? ' pulse' : ''}`;
+
+      group.innerHTML = `
+        <div class="prob-value">${pct.toFixed(1)}%</div>
+        <div class="${barClass}" style="height:${height}%; background-color:${colors[i%colors.length]}"></div>
+        <div class="prob-label" title="${d.text}">${d.text}</div>
+      `;
+
+      if (interactive) {
+        group.dataset.word = d.text;
+        group.id = `bar-${cssSafeId(d.text)}`;
+      }
+
+      container.appendChild(group);
+
+      if (containerId === 'staticChart') {
+        group.onclick = () => {
+          document.querySelectorAll('#staticChart .prob-bar').forEach(b => b.classList.remove('selected'));
+          group.querySelector('.prob-bar').classList.add('selected');
+        };
+      }
+    });
+  }
+
+  function renderStaticChart() {
+    syncTopKButtons();
+
+    const ctx = currentContext || "";
+    const candidates = generateCandidates(ctx);
+    const probs = getProbabilities(candidates, temperature);
+
+    const top = probs.sort((a,b)=>b.prob-a.prob).slice(0, topK);
+    renderBars('staticChart', top, false, true);
+
+    document.getElementById('tempVal4').innerText = temperature.toFixed(1);
+  }
+
+  // ---------------------------
+  // Scene 5: Sampling
+  // ---------------------------
+  function updateTempAll(val) {
+    temperature = parseFloat(val);
+
+    document.getElementById('tempVal').innerText   = temperature.toFixed(1);
+    document.getElementById('tempVal4').innerText  = temperature.toFixed(1);
+
+    if (currentStep === 4) renderStaticChart();
+    if (currentStep === 5) updateGenChart();
+  }
+
+  function updateGenChart() {
+    const ctx = currentContext || "";
+    const candidates = generateCandidates(ctx);
+    const data = getProbabilities(candidates, temperature);
+
+    const top = data.sort((a,b)=>b.prob-a.prob).slice(0, 5);
+    renderBars('dynamicChart', top, true, false);
+  }
+
+  function resetGen() {
+    currentContext = baseContext;
+    document.getElementById('genContext').innerHTML =
+      `<span style="color:var(--text-sub)">[Prompt]</span> ` + (baseContext || "(empty)");
+    updateGenChart();
+
+    const preview = (currentContext || "(empty)") + "...";
+    document.getElementById('previewText').innerText = preview;
+  }
+
+  function generateStep() {
+    const chart = document.getElementById('dynamicChart');
+    const ctx = currentContext || "";
+    const candidates = generateCandidates(ctx);
+    const data = getProbabilities(candidates, temperature).sort((a,b)=>b.prob-a.prob).slice(0, 5);
+
+    let r = Math.random();
+    let selectedWord = data[0].text;
+    let cumulative = 0;
+
+    for (let item of data) {
+      cumulative += item.prob;
+      if (r <= cumulative) { selectedWord = item.text; break; }
+    }
+
+    const selectedBar = document.getElementById(`bar-${cssSafeId(selectedWord)}`)?.querySelector('.prob-bar');
+    if (selectedBar) {
+      document.querySelectorAll('#dynamicChart .prob-bar').forEach(b => b.classList.remove('selected'));
+      selectedBar.classList.add('selected');
+    }
+
+    const flyWord = document.createElement('div');
+    flyWord.className = 'flying-word';
+    flyWord.innerText = selectedWord;
+
+    const barRect = selectedBar ? selectedBar.getBoundingClientRect() : chart.getBoundingClientRect();
+    const targetContainer = document.getElementById('genContext');
+    const targetRect = targetContainer.getBoundingClientRect();
+
+    flyWord.style.left = (barRect.left + barRect.width/2) + 'px';
+    flyWord.style.top = (barRect.top) + 'px';
+    document.body.appendChild(flyWord);
+
+    flyWord.offsetHeight;
+
+    requestAnimationFrame(() => {
+      flyWord.style.left = (targetRect.right - 40) + 'px';
+      flyWord.style.top = (targetRect.top + 20) + 'px';
+      flyWord.style.opacity = 0;
+      flyWord.style.transform = "scale(0.5)";
+    });
+
+    setTimeout(() => {
+      const needsSpace = (currentContext && /[a-zA-Z0-9]$/.test(currentContext) && /^[a-zA-Z0-9]/.test(selectedWord));
+      currentContext += (needsSpace ? " " : " ") + selectedWord;
+
+      document.getElementById('genContext').innerHTML +=
+        `<span style="color:var(--success); animation:popIn 0.3s"> ${selectedWord}</span>`;
+
+      flyWord.remove();
+      updateGenChart();
+
+      const preview = (currentContext || "(empty)") + "...";
+      document.getElementById('previewText').innerText = preview;
+      
+      // Update efficiency page scenario text with current token count
+      const tokens = mockTokenizer(currentContext);
+      const kvSteps = parseInt(document.getElementById('kvSteps').value, 10);
+      document.getElementById('kvPromptText').innerText = `Generate ${kvSteps} tokens after a ${tokens.length}-token prompt`;
+      
+      if(currentStep === 3) renderEfficiency();
+    }, 800);
+  }
+
+  // ---------------------------
+  // Defaults
+  // ---------------------------
+  function initDefaults() {
+    syncTopKButtons();
+    setLayer(8);
+    updateGenChart();
+
+    document.getElementById('tempVal').innerText = temperature.toFixed(1);
+    document.getElementById('tempVal4').innerText = temperature.toFixed(1);
+
+    renderEfficiency();
+  }
+  initDefaults();
+</script>
+</body>
+</html>
